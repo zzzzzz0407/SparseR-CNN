@@ -53,7 +53,11 @@ class SparseRCNN(nn.Module):
         self.size_divisibility = self.backbone.size_divisibility
         
         # Build Proposals.
-        self.init_proposal_features = nn.Embedding(self.num_proposals, self.hidden_dim)
+        self.fast_on = cfg.MODEL.SparseRCNN.FAST_ON
+        if self.fast_on:
+            self.init_proposal_features = None
+        else:
+            self.init_proposal_features = nn.Embedding(self.num_proposals, self.hidden_dim)
         self.init_proposal_boxes = nn.Embedding(self.num_proposals, 4)
         nn.init.constant_(self.init_proposal_boxes.weight[:, :2], 0.5)
         nn.init.constant_(self.init_proposal_boxes.weight[:, 2:], 1.0)
@@ -97,7 +101,6 @@ class SparseRCNN(nn.Module):
         self.normalizer = lambda x: (x - pixel_mean) / pixel_std
         self.to(self.device)
 
-
     def forward(self, batched_inputs):
         """
         Args:
@@ -130,7 +133,10 @@ class SparseRCNN(nn.Module):
         proposal_boxes = proposal_boxes[None] * images_whwh[:, None, :]
 
         # Prediction.
-        outputs_class, outputs_coord = self.head(features, proposal_boxes, self.init_proposal_features.weight)
+        if self.fast_on:
+            outputs_class, outputs_coord = self.head(features, proposal_boxes, self.init_proposal_features)
+        else:
+            outputs_class, outputs_coord = self.head(features, proposal_boxes, self.init_proposal_features.weight)
         output = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
 
         if self.training:

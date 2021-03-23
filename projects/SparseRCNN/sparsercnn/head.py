@@ -22,6 +22,8 @@ import torch.nn.functional as F
 from detectron2.modeling.poolers import ROIPooler, cat
 from detectron2.structures import Boxes
 
+from .ablation.fast_head import FastHeadLayer
+
 
 _DEFAULT_SCALE_CLAMP = math.log(100000.0 / 16)
 
@@ -43,7 +45,12 @@ class DynamicHead(nn.Module):
         dropout = cfg.MODEL.SparseRCNN.DROPOUT
         activation = cfg.MODEL.SparseRCNN.ACTIVATION
         num_heads = cfg.MODEL.SparseRCNN.NUM_HEADS
-        rcnn_head = RCNNHead(cfg, d_model, num_classes, dim_feedforward, nhead, dropout, activation)        
+
+        fast_on = cfg.MODEL.SparseRCNN.FAST_ON
+        if fast_on:
+            rcnn_head = FastHeadLayer(cfg, num_classes)
+        else:
+            rcnn_head = RCNNHead(cfg, d_model, num_classes, dim_feedforward, nhead, dropout, activation)
         self.head_series = _get_clones(rcnn_head, num_heads)
         self.return_intermediate = cfg.MODEL.SparseRCNN.DEEP_SUPERVISION
         
@@ -96,9 +103,12 @@ class DynamicHead(nn.Module):
 
         bs = len(features[0])
         bboxes = init_bboxes
-        
-        init_features = init_features[None].repeat(1, bs, 1)
-        proposal_features = init_features.clone()
+
+        if init_features is not None:
+            init_features = init_features[None].repeat(1, bs, 1)
+            proposal_features = init_features.clone()
+        else:
+            proposal_features = None
         
         for rcnn_head in self.head_series:
             class_logits, pred_bboxes, proposal_features = rcnn_head(features, bboxes, proposal_features, self.box_pooler)
@@ -167,7 +177,6 @@ class RCNNHead(nn.Module):
         self.scale_clamp = scale_clamp
         self.bbox_weights = bbox_weights
 
-
     def forward(self, features, bboxes, pro_features, pooler):
         """
         :param bboxes: (N, nr_boxes, 4)
@@ -212,7 +221,6 @@ class RCNNHead(nn.Module):
         pred_bboxes = self.apply_deltas(bboxes_deltas, bboxes.view(-1, 4))
         
         return class_logits.view(N, nr_boxes, -1), pred_bboxes.view(N, nr_boxes, -1), obj_features
-    
 
     def apply_deltas(self, deltas, boxes):
         """

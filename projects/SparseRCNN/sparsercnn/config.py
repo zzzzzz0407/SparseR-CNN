@@ -45,3 +45,7 @@ def add_sparsercnn_config(cfg):
     # Optimizer.
     cfg.SOLVER.OPTIMIZER = "ADAMW"
     cfg.SOLVER.BACKBONE_MULTIPLIER = 1.0
+
+    # Modified Fast Head.
+    cfg.MODEL.SparseRCNN.FAST_ON = False
+    cfg.MODEL.SparseRCNN.FAST_SELF_ATTN = False
