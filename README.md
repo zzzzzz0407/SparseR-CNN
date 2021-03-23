@@ -4,23 +4,37 @@
 
 ![](readme/fig.jpeg)
 
-## Paper
+## Paper (CVPR 2021)
 [Sparse R-CNN: End-to-End Object Detection with Learnable Proposals](https://arxiv.org/abs/2011.12450)
 
 ## Updates
+- (02/03/2021) Higher performance is reported by using stronger backbone model [PVT](https://github.com/whai362/PVT). 
+- (23/02/2021) Higher performance is reported by using stronger pretrain model [DetCo](https://github.com/xieenze/DetCo). 
+- (02/12/2020) Models and logs(R101_100pro_3x and R101_300pro_3x) are available. 
 - (26/11/2020) Models and logs(R50_100pro_3x and R50_300pro_3x) are available.
-- (26/11/2020) Higher Performance for Sparse R-CNN is reported by setting the dropout rate as 0.0. 
+- (26/11/2020) Higher performance for Sparse R-CNN is reported by setting the dropout rate as 0.0. 
 
 ## Models
+Method | inf_time | train_time | box AP | codebase
+--- |:---:|:---:|:---:|:---:
+[R50_300pro_3x](projects/SparseRCNN/configs/sparsercnn.res50.300pro.3x.yaml) | 22 FPS | 24h  | 45.0 | [detectron2](https://github.com/facebookresearch/detectron2)
+[R50_300pro_3x.detco](projects/SparseRCNN/configs/sparsercnn.res50.300pro.3x.detco.yaml) | 22 FPS | 28h  | 46.5 | [detectron2](https://github.com/facebookresearch/detectron2)
+[PVTSmall_300pro_3x](https://github.com/whai362/PVT) | 13 FPS | 50h  | 45.7 | [mmdetection](https://github.com/open-mmlab/mmdetection)
+
 Method | inf_time | train_time | box AP | download
 --- |:---:|:---:|:---:|:---:
 [R50_100pro_3x](projects/SparseRCNN/configs/sparsercnn.res50.100pro.3x.yaml) | 23 FPS | 19h  | 42.8 | [model](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__) \| [log](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__)
 [R50_300pro_3x](projects/SparseRCNN/configs/sparsercnn.res50.300pro.3x.yaml) | 22 FPS | 24h  | 45.0 | [model](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__) \| [log](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__)
+[R101_100pro_3x](projects/SparseRCNN/configs/sparsercnn.res101.100pro.3x.yaml) | 19 FPS | 25h  | 44.1 | [model](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__) \| [log](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__)
+[R101_300pro_3x](projects/SparseRCNN/configs/sparsercnn.res101.300pro.3x.yaml) | 18 FPS | 29h  | 46.4 | [model](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__) \| [log](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__)
+
+Models and logs are available in [Baidu Drive](https://pan.baidu.com/s/1v1g5JKPmn0rqiGGAvYHYvw) by code wt9n.
 
 #### Notes
-- More settings are coming.
 - We observe about 0.3 AP noise.
 - The training time is on 8 GPUs with batchsize 16. The inference time is on single GPU. All GPUs are NVIDIA V100.
+- We use the models pre-trained on imagenet using torchvision. And we provide [torchvision's ResNet-101.pkl](https://drive.google.com/drive/u/1/folders/19UaSgR4OwqA-BhCs_wG7i6E-OXC5NR__) model. 
+More details can be found in [the conversion script](tools/convert-torchvision-to-d2.py).
 
 
 ## Installation
@@ -68,6 +82,10 @@ python demo/demo.py\
     --input path/to/images --output path/to/save_images --confidence-threshold 0.4 \
     --opts MODEL.WEIGHTS path/to/model.pth
 ```
+## Third-party resources
+- mmdetection implementation: [sparse_rcnn](https://github.com/open-mmlab/mmdetection/tree/master/configs/sparse_rcnn). Thank [Shilong Zhang](https://github.com/jshilong)!
+- cvpod implementation:[sparse_rcnn](https://github.com/Megvii-BaseDetection/cvpods/tree/0927bdcf8d0ae62e8f8d39ba808fa072ee793034/playground/detection/coco/sparse_rcnn). Thank [Benjin Zhu](https://github.com/poodarchu)!
+
 
 ## License
 
