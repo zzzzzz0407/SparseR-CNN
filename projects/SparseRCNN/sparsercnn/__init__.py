@@ -6,3 +6,5 @@
 from .config import add_sparsercnn_config
 from .detector import SparseRCNN
 from .dataset_mapper import SparseRCNNDatasetMapper
+from .segmentation import DETRsegm, PostProcessPanoptic, PostProcessSegm, dice_loss, sigmoid_focal_loss
+from .position_encoding import build_position_encoding

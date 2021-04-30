@@ -458,7 +458,6 @@ class Database(object):
         return AP, recall, (rpX, rpY, thr, fpn, recalln, fppi)
     
 
-
 def _evaluate_predictions_on_crowdhuman(gt_path, dt_path, target_key="box", mode=0):
     """
     Evaluate the coco results using COCOEval API.
@@ -492,7 +491,7 @@ if __name__ == "__main__":
             new_json_results[res['image_id']]['dtboxes'].append({'box':res['bbox'], 'score':res['score']})
         else:
             new_json_results[res['image_id']] = dict()
-            new_json_results[res['image_id']]['ID'] =  res['image_id']
+            new_json_results[res['image_id']]['ID'] = res['image_id']
             new_json_results[res['image_id']]['dtboxes'] = list()
             new_json_results[res['image_id']]['dtboxes'].append({'box':res['bbox'], 'score':res['score']})
             
@@ -516,9 +515,9 @@ if __name__ == "__main__":
         if res['image_id'] in new_json_results:
             new_json_results[res['image_id']]['gtboxes'].append({
                 'tag': 'person',
-                'fbox':res['bbox'], 
-                'hbox':res['bbox_vis'], # here is wrong, but no matter
-                'extra':{'ignore':res['iscrowd']}
+                'fbox': res['bbox'],
+                'hbox': res['bbox_vis'],  # here is wrong, but no matter
+                'extra': {'ignore': res['iscrowd']}
             })
         else:
             new_json_results[res['image_id']] = dict()
@@ -528,9 +527,9 @@ if __name__ == "__main__":
             new_json_results[res['image_id']]['gtboxes'] = list()
             new_json_results[res['image_id']]['gtboxes'].append({
                 'tag': 'person',
-                'fbox':res['bbox'], 
-                'hbox':res['bbox_vis'], # here is wrong, but no matter
-                'extra':{'ignore':res['iscrowd']}
+                'fbox': res['bbox'],
+                'hbox': res['bbox_vis'],  # here is wrong, but no matter
+                'extra': {'ignore': res['iscrowd']}
             })    
     with open(gt_path, "w") as f:
         for db in new_json_results:
@@ -539,6 +538,5 @@ if __name__ == "__main__":
 
     eval_results = _evaluate_predictions_on_crowdhuman(gt_path, dt_path)
 
-
     for i, metric in enumerate(["AP", "mMR", "Recall"]):
-        print(metric,":",eval_results[i])
+        print(metric, ":", eval_results[i])

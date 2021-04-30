@@ -36,7 +36,7 @@ class DynamicHead(nn.Module):
         # Build RoI.
         box_pooler = self._init_box_pooler(cfg, roi_input_shape)
         self.box_pooler = box_pooler
-        
+
         # Build heads.
         num_classes = cfg.MODEL.SparseRCNN.NUM_CLASSES
         d_model = cfg.MODEL.SparseRCNN.HIDDEN_DIM
@@ -100,6 +100,7 @@ class DynamicHead(nn.Module):
 
         inter_class_logits = []
         inter_pred_bboxes = []
+        inter_proposal_features = []
 
         bs = len(features[0])
         bboxes = init_bboxes
@@ -116,12 +117,14 @@ class DynamicHead(nn.Module):
             if self.return_intermediate:
                 inter_class_logits.append(class_logits)
                 inter_pred_bboxes.append(pred_bboxes)
+                inter_proposal_features.append(proposal_features.view(bs, proposal_features.shape[1]//bs, -1))
             bboxes = pred_bboxes.detach()
 
         if self.return_intermediate:
-            return torch.stack(inter_class_logits), torch.stack(inter_pred_bboxes)
+            return torch.stack(inter_class_logits), torch.stack(inter_pred_bboxes), torch.stack(inter_proposal_features)
 
-        return class_logits[None], pred_bboxes[None]
+        return class_logits[None], pred_bboxes[None], \
+               proposal_features.view(bs, proposal_features.shape[1]//bs, -1)[None]
 
 
 class RCNNHead(nn.Module):

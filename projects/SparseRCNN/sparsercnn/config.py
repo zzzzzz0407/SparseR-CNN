@@ -49,3 +49,10 @@ def add_sparsercnn_config(cfg):
     # Modified Fast Head.
     cfg.MODEL.SparseRCNN.FAST_ON = False
     cfg.MODEL.SparseRCNN.FAST_SELF_ATTN = False
+
+    # Mask Head.
+    cfg.MODEL.SparseRCNN.MASK_WEIGHT = 1.0
+    cfg.MODEL.SparseRCNN.DICE_WEIGHT = 1.0
+    cfg.MODEL.SparseRCNN.TYPE_POSITION = "sine"
+    cfg.MODEL.SparseRCNN.POS_REFINE = True
+

@@ -13,6 +13,7 @@ OUT_PATH = DATA_PATH + 'annotations/'
 SPLITS = ['val', 'train']
 DEBUG = False
 
+
 def load_func(fpath):
     print('fpath', fpath)
     assert os.path.exists(fpath)
@@ -20,6 +21,7 @@ def load_func(fpath):
         lines = fid.readlines()
     records =[json.loads(line.strip('\n')) for line in lines]
     return records
+
 
 if __name__ == '__main__':
     if not os.path.exists(OUT_PATH):
