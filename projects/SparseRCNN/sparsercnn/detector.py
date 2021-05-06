@@ -30,6 +30,7 @@ from .util.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, get_world_size, interpolate,
                        is_dist_avail_and_initialized)
 from .position_encoding import build_position_encoding
+from .mask.mask_head import MaskHead
 
 __all__ = ["SparseRCNN"]
 
@@ -43,6 +44,7 @@ class SparseRCNN(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
+        self.cfg = cfg
         self.device = torch.device(cfg.MODEL.DEVICE)
 
         self.in_features = cfg.MODEL.ROI_HEADS.IN_FEATURES
@@ -86,13 +88,16 @@ class SparseRCNN(nn.Module):
 
         # Mask head.
         self.mask_on = cfg.MODEL.MASK_ON
+        self.type_mask = cfg.MODEL.SparseRCNN.TYPE_MASK
         if self.mask_on:
-            self.mask_head = DETRsegm(cfg)
-            self.position_embedding = build_position_encoding(cfg)
+            if self.type_mask == "MASK_RCNN":
+                self.mask_head = MaskHead(cfg=cfg, roi_input_shape=self.backbone.output_shape())
             mask_weight = cfg.MODEL.SparseRCNN.MASK_WEIGHT
-            dice_weight = cfg.MODEL.SparseRCNN.DICE_WEIGHT
             weight_dict.update({"loss_mask": mask_weight})
-            weight_dict.update({"loss_dice": dice_weight})
+            # self.mask_head = DETRsegm(cfg)
+            # self.position_embedding = build_position_encoding(cfg)
+            # dice_weight = cfg.MODEL.SparseRCNN.DICE_WEIGHT
+            # weight_dict.update({"loss_dice": dice_weight})
 
         if self.deep_supervision:
             aux_weight_dict = {}
@@ -154,15 +159,30 @@ class SparseRCNN(nn.Module):
         else:
             outputs_class, outputs_coord, proposal_features = self.head(features, proposal_boxes, self.init_proposal_features.weight)
         output = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
-
         if self.mask_on:
-            B, _, H, W = images.tensor.shape
-            masks = torch.ones((B, H, W), dtype=torch.bool, device=images.device)
-            for img_size, m in zip(images.image_sizes, masks):
-                m[:img_size[0], : img_size[1]] = False
-            masks = F.interpolate(masks[None].float(), size=features[-1].shape[-2:]).bool()[0]
-            pos = self.position_embedding(features[-1], masks)
-            output.update({"pred_masks": self.mask_head(proposal_features[-1], masks, pos, features)})
+            if self.type_mask == "MASK_RCNN":
+                output.update({"pred_masks": self.mask_head(features, output["pred_boxes"].detach())})
+            else:
+                raise NotImplementedError
+
+        """
+                if self.mask_on:
+            
+            # B, _, H, W = images.tensor.shape
+            # masks = torch.ones((B, H, W), dtype=torch.bool, device=images.device)
+            # for img_size, m in zip(images.image_sizes, masks):
+            #     m[:img_size[0], : img_size[1]] = False
+            # masks = F.interpolate(masks[None].float(), size=features[-1].shape[-2:]).bool()[0]
+            # pos = self.position_embedding(features[-1], masks)
+            
+            # continue
+
+            if self.type_mask == "MASK_RCNN":
+                output.update({"pred_masks": self.mask_head(features)})
+            else:
+                raise NotImplementedError
+        
+        """
 
         if self.training:
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
@@ -210,7 +230,12 @@ class SparseRCNN(nn.Module):
             target["image_size_xyxy_tgt"] = image_size_xyxy_tgt.to(self.device)
             target["area"] = targets_per_image.gt_boxes.area().to(self.device)
             if self.mask_on:
-                assert targets_per_image.has("gt_masks")
+                target["gt_masks"] = targets_per_image.gt_masks
+                target["mask_size"] = self.cfg.MODEL.ROI_MASK_HEAD.POOLER_RESOLUTION * 2
+                target["type_mask"] = self.cfg.MODEL.SparseRCNN.TYPE_MASK
+                # target[""]
+                # assert targets_per_image.has("gt_masks")
+                """
                 if isinstance(targets_per_image.get("gt_masks"), PolygonMasks):
                     per_im_bitmasks = []
                     polygons = targets_per_image.get("gt_masks").polygons
@@ -226,6 +251,8 @@ class SparseRCNN(nn.Module):
                 valid_im_bitmasks = per_im_bitmasks.new_zeros(per_im_bitmasks.shape[0], bh, bw)
                 valid_im_bitmasks[:, :h, :w] = per_im_bitmasks
                 target["masks"] = valid_im_bitmasks
+                """
+
             new_targets.append(target)
         return new_targets
 

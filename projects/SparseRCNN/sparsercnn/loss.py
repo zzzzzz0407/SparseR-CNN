@@ -118,27 +118,41 @@ class SetCriterion(nn.Module):
            targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w]
         """
         assert "pred_masks" in outputs
+        idx = self._get_src_permutation_idx(indices)
+        src_masks = outputs['pred_masks'][idx]
+        cls_agnostic_mask = src_masks.size(1) == 1
+        total_num_masks = src_masks.size(0)
+        assert total_num_masks == num_boxes
+        if total_num_masks == 0:
+            return {"loss_mask": src_masks.sum() * 0.}
 
-        src_idx = self._get_src_permutation_idx(indices)
-        tgt_idx = self._get_tgt_permutation_idx(indices)
-        src_masks = outputs["pred_masks"]
-        src_masks = src_masks[src_idx]
-        masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
-        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(src_masks)
-        target_masks = target_masks[tgt_idx]
+        # prepare gt masks.
+        gt_masks = []
+        for i, (src, tgt) in enumerate(indices):
+            target_masks_per_image = targets[i]["gt_masks"][tgt]
+            proposal_boxes_per_image = outputs["pred_boxes"][i][src].detach()
+            mask_side_len = targets[i]["mask_size"]
+            gt_masks_per_image = target_masks_per_image.\
+                crop_and_resize(proposal_boxes_per_image, mask_side_len).to(device=src_masks.device)
+            # A tensor of shape (N, M, M), N=#instances in the image; M=mask_side_len
+            gt_masks.append(gt_masks_per_image)
+        gt_masks = torch.cat(gt_masks, dim=0)
 
-        # up-sample predictions to the target size.
-        src_masks = interpolate(src_masks[:, None], size=target_masks.shape[-2:],
-                                mode="bilinear", align_corners=False)
-        src_masks = src_masks[:, 0].flatten(1)
+        type_mask = targets[0]["type_mask"]
+        if type_mask == "MASK_RCNN":
+            if cls_agnostic_mask:
+                pred_mask_logits = src_masks[:, 0]
+            else:
+                ins_idx = torch.arange(total_num_masks)
+                gt_classes = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
+                pred_mask_logits = src_masks[ins_idx, gt_classes]
+            gt_masks = gt_masks.to(dtype=torch.float32)
+            mask_loss = F.binary_cross_entropy_with_logits(pred_mask_logits, gt_masks, reduction="mean")
+        else:
+            raise NotImplementedError
 
-        target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(src_masks.shape)
         losses = {
-            "loss_mask": sigmoid_focal_loss(src_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(src_masks, target_masks, num_boxes),
+            "loss_mask": mask_loss,
         }
         return losses
 

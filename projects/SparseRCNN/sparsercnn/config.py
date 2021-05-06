@@ -55,4 +55,6 @@ def add_sparsercnn_config(cfg):
     cfg.MODEL.SparseRCNN.DICE_WEIGHT = 1.0
     cfg.MODEL.SparseRCNN.TYPE_POSITION = "sine"
     cfg.MODEL.SparseRCNN.POS_REFINE = True
+    cfg.MODEL.SparseRCNN.TYPE_MASK = "MASK_RCNN"
+
 

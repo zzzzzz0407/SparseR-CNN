@@ -129,7 +129,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
     args = default_argument_parser().parse_args()
     print("Command Line Args:", args)
