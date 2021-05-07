@@ -8,12 +8,12 @@ MODEL:
   SparseRCNN:
     NUM_PROPOSALS: 300
     NUM_CLASSES: 80
-    TYPE_MASK: "MASK_RCNN"
+    TYPE_MASK: "MASK_ENCODING"
     MASK_WEIGHT: 6.0
     MASK_ENCODING:
       MASK_SIZE: 96
-      DIM_MASK: 128
-      PATH_ENCODING: "datasets/coco/encoding/local/encoder36_size96_dim128.pth"
+      DIM_MASK: 256
+      PATH_ENCODING: "datasets/coco/encoding/local/encoder36_size96_dim256.pth"
       NUM_MLP: 2
       DIM_MLP: 1024
   ROI_MASK_HEAD:
@@ -22,17 +22,14 @@ MODEL:
     NUM_CONV: 4
     POOLER_SAMPLING_RATIO: 2
 DATASETS:
-  TRAIN: ("coco_2017_val",)
+  TRAIN: ("coco_2017_train",)
   TEST:  ("coco_2017_val",)
 SOLVER:
   STEPS: (210000, 250000)
   MAX_ITER: 270000
-  IMS_PER_BATCH: 2
-DATALOADER:
-  FILTER_EMPTY_ANNOTATIONS: True
 INPUT:
   CROP:
     ENABLED: True
   FORMAT: "RGB"
-  MIN_SIZE_TRAIN: (800,)
-
+DATALOADER:
+  FILTER_EMPTY_ANNOTATIONS: True

@@ -27,7 +27,7 @@ class SetCriterion(nn.Module):
         1) we compute hungarian assignment between ground truth boxes and the outputs of the model
         2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
     """
-    def __init__(self, cfg, num_classes, matcher, weight_dict, eos_coef, losses, use_focal):
+    def __init__(self, cfg, num_classes, matcher, weight_dict, eos_coef, losses, use_focal, type_mask):
         """ Create the criterion.
         Parameters:
             num_classes: number of object categories, omitting the special no-object category
@@ -44,6 +44,7 @@ class SetCriterion(nn.Module):
         self.eos_coef = eos_coef
         self.losses = losses
         self.use_focal = use_focal
+        self.type_mask = type_mask
         if self.use_focal:
             self.focal_loss_alpha = cfg.MODEL.SparseRCNN.ALPHA
             self.focal_loss_gamma = cfg.MODEL.SparseRCNN.GAMMA
@@ -113,7 +114,7 @@ class SetCriterion(nn.Module):
 
         return losses
 
-    def loss_masks(self, outputs, targets, indices, num_boxes):
+    def loss_masks(self, outputs, targets, indices, num_boxes, mask_encoding=None):
         """Compute the losses related to the masks: the focal loss and the dice loss.
            targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w]
         """
@@ -122,7 +123,7 @@ class SetCriterion(nn.Module):
         src_masks = outputs['pred_masks'][idx]
         cls_agnostic_mask = src_masks.size(1) == 1
         total_num_masks = src_masks.size(0)
-        assert total_num_masks == num_boxes
+        # assert total_num_masks == num_boxes
         if total_num_masks == 0:
             return {"loss_mask": src_masks.sum() * 0.}
 
@@ -137,6 +138,7 @@ class SetCriterion(nn.Module):
             # A tensor of shape (N, M, M), N=#instances in the image; M=mask_side_len
             gt_masks.append(gt_masks_per_image)
         gt_masks = torch.cat(gt_masks, dim=0)
+        gt_masks = gt_masks.to(dtype=torch.float32)
 
         type_mask = targets[0]["type_mask"]
         if type_mask == "MASK_RCNN":
@@ -146,8 +148,11 @@ class SetCriterion(nn.Module):
                 ins_idx = torch.arange(total_num_masks)
                 gt_classes = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
                 pred_mask_logits = src_masks[ins_idx, gt_classes]
-            gt_masks = gt_masks.to(dtype=torch.float32)
             mask_loss = F.binary_cross_entropy_with_logits(pred_mask_logits, gt_masks, reduction="mean")
+        elif type_mask == "MASK_ENCODING":
+            gt_masks = mask_encoding.encoding(gt_masks)
+            mask_loss = F.l1_loss(src_masks, gt_masks, reduction="none")
+            mask_loss = mask_loss.sum(1).mean()
         else:
             raise NotImplementedError
 
@@ -168,16 +173,19 @@ class SetCriterion(nn.Module):
         tgt_idx = torch.cat([tgt for (_, tgt) in indices])
         return batch_idx, tgt_idx
 
-    def get_loss(self, loss, outputs, targets, indices, num_boxes, **kwargs):
+    def get_loss(self, loss, outputs, targets, indices, num_boxes, mask_encoding=None):
         loss_map = {
             'labels': self.loss_labels,
             'boxes': self.loss_boxes,
             'masks': self.loss_masks
         }
         assert loss in loss_map, f'do you really want to compute {loss} loss?'
-        return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
+        if loss == "masks":
+            return loss_map[loss](outputs, targets, indices, num_boxes, mask_encoding)
+        else:
+            return loss_map[loss](outputs, targets, indices, num_boxes)
 
-    def forward(self, outputs, targets):
+    def forward(self, outputs, targets, mask_encoding=None):
         """ This performs the loss computation.
         Parameters:
              outputs: dict of tensors, see the output specification of the model for the format
@@ -199,7 +207,10 @@ class SetCriterion(nn.Module):
         # Compute all the requested losses
         losses = {}
         for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+            if loss == "masks":
+                losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes, mask_encoding))
+            else:
+                losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if 'aux_outputs' in outputs:
@@ -212,8 +223,9 @@ class SetCriterion(nn.Module):
                     kwargs = {}
                     if loss == 'labels':
                         # Logging is enabled only for the last layer
-                        kwargs = {'log': False}
-                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
+                        pass
+                        # kwargs = {'log': False}
+                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes,)#  **kwargs)
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 

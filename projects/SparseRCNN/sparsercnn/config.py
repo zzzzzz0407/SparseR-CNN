@@ -55,6 +55,14 @@ def add_sparsercnn_config(cfg):
     cfg.MODEL.SparseRCNN.DICE_WEIGHT = 1.0
     cfg.MODEL.SparseRCNN.TYPE_POSITION = "sine"
     cfg.MODEL.SparseRCNN.POS_REFINE = True
-    cfg.MODEL.SparseRCNN.TYPE_MASK = "MASK_RCNN"
+    cfg.MODEL.SparseRCNN.TYPE_MASK = "MASK_RCNN"  # or "MASK_ENCODING"
 
-
+    # Mask Encoding.
+    cfg.MODEL.SparseRCNN.MASK_ENCODING = CN()
+    cfg.MODEL.SparseRCNN.MASK_ENCODING.MASK_SIZE = 96
+    cfg.MODEL.SparseRCNN.MASK_ENCODING.DIM_MASK = 256
+    cfg.MODEL.SparseRCNN.MASK_ENCODING.PATH_ENCODING = "datasets/coco/encoding/local/encoder36_size96_dim256.pth"
+    cfg.MODEL.SparseRCNN.MASK_ENCODING.NUM_MLP = 2
+    cfg.MODEL.SparseRCNN.MASK_ENCODING.DIM_MLP = 1024
+    # cfg.MODEL.SparseRCNN.MASK_ENCODING.PRED_NORM = True
+    # cfg.MODEL.SparseRCNN.MASK_ENCODING.TYPE_NORM = "p1"

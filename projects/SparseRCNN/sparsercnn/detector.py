@@ -90,8 +90,7 @@ class SparseRCNN(nn.Module):
         self.mask_on = cfg.MODEL.MASK_ON
         self.type_mask = cfg.MODEL.SparseRCNN.TYPE_MASK
         if self.mask_on:
-            if self.type_mask == "MASK_RCNN":
-                self.mask_head = MaskHead(cfg=cfg, roi_input_shape=self.backbone.output_shape())
+            self.mask_head = MaskHead(cfg=cfg, roi_input_shape=self.backbone.output_shape())
             mask_weight = cfg.MODEL.SparseRCNN.MASK_WEIGHT
             weight_dict.update({"loss_mask": mask_weight})
             # self.mask_head = DETRsegm(cfg)
@@ -115,7 +114,8 @@ class SparseRCNN(nn.Module):
                                       weight_dict=weight_dict,
                                       eos_coef=no_object_weight,
                                       losses=losses,
-                                      use_focal=self.use_focal)
+                                      use_focal=self.use_focal,
+                                      type_mask=self.type_mask)
 
         pixel_mean = torch.Tensor(cfg.MODEL.PIXEL_MEAN).to(self.device).view(3, 1, 1)
         pixel_std = torch.Tensor(cfg.MODEL.PIXEL_STD).to(self.device).view(3, 1, 1)
@@ -137,6 +137,13 @@ class SparseRCNN(nn.Module):
                 * "height", "width" (int): the output resolution of the model, used in inference.
                   See :meth:`postprocess` for details.
         """
+        # init mask encoding if needed.
+        if self.training:
+            if self.type_mask == "MASK_ENCODING":
+                if not self.mask_head.flag_parameters:
+                    self.mask_head.loading_parameters_for_encoding(self.mask_head.path_encoding)
+                    self.mask_head.flag_parameters = True
+
         images, images_whwh = self.preprocess_image(batched_inputs)
         if isinstance(images, (list, torch.Tensor)):
             images = nested_tensor_from_tensor_list(images)
@@ -160,10 +167,7 @@ class SparseRCNN(nn.Module):
             outputs_class, outputs_coord, proposal_features = self.head(features, proposal_boxes, self.init_proposal_features.weight)
         output = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
         if self.mask_on:
-            if self.type_mask == "MASK_RCNN":
-                output.update({"pred_masks": self.mask_head(features, output["pred_boxes"].detach())})
-            else:
-                raise NotImplementedError
+            output.update({"pred_masks": self.mask_head(features, output["pred_boxes"].detach())})
 
         """
                 if self.mask_on:
@@ -191,7 +195,10 @@ class SparseRCNN(nn.Module):
                 output['aux_outputs'] = [{'pred_logits': a, 'pred_boxes': b}
                                          for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
-            loss_dict = self.criterion(output, targets)
+            if self.type_mask == "MASK_ENCODING":
+                loss_dict = self.criterion(output, targets, mask_encoding=self.mask_head.mask_encoding)
+            else:
+                loss_dict = self.criterion(output, targets)
             weight_dict = self.criterion.weight_dict
             for k in loss_dict.keys():
                 if k in weight_dict:
@@ -201,7 +208,14 @@ class SparseRCNN(nn.Module):
         else:
             box_cls = output["pred_logits"]
             box_pred = output["pred_boxes"]
-            results = self.inference(box_cls, box_pred, images.image_sizes)
+            if self.mask_on:
+                mask_pred = output["pred_masks"]
+            else:
+                mask_pred = None
+            results = self.inference(box_cls, box_pred, mask_pred, images.image_sizes)
+
+            # if self.mask_on:
+            #     self.mask_head.mask_inference(mask_pred, results)
 
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(results, batched_inputs, images.image_sizes):
@@ -231,8 +245,12 @@ class SparseRCNN(nn.Module):
             target["area"] = targets_per_image.gt_boxes.area().to(self.device)
             if self.mask_on:
                 target["gt_masks"] = targets_per_image.gt_masks
-                target["mask_size"] = self.cfg.MODEL.ROI_MASK_HEAD.POOLER_RESOLUTION * 2
-                target["type_mask"] = self.cfg.MODEL.SparseRCNN.TYPE_MASK
+                target["type_mask"] = self.type_mask
+                if self.type_mask == "MASK_RCNN":
+                    target["mask_size"] = self.cfg.MODEL.ROI_MASK_HEAD.POOLER_RESOLUTION * 2
+                else:
+                    target["mask_size"] = self.cfg.MODEL.SparseRCNN.MASK_ENCODING.MASK_SIZE
+
                 # target[""]
                 # assert targets_per_image.has("gt_masks")
                 """
@@ -256,7 +274,7 @@ class SparseRCNN(nn.Module):
             new_targets.append(target)
         return new_targets
 
-    def inference(self, box_cls, box_pred, image_sizes):
+    def inference(self, box_cls, box_pred, mask_pred, image_sizes):
         """
         Arguments:
             box_cls (Tensor): tensor of shape (batch_size, num_proposals, K).
@@ -289,6 +307,26 @@ class SparseRCNN(nn.Module):
                 result.pred_boxes = Boxes(box_pred_per_image)
                 result.scores = scores_per_image
                 result.pred_classes = labels_per_image
+                if self.mask_on:
+                    mask_pred_per_image = mask_pred[i]
+                    if self.type_mask == "MASK_RCNN":
+                        cls_agnostic_mask = mask_pred_per_image.size(1) == 1
+                        if cls_agnostic_mask:
+                            raise NotImplementedError
+                            mask_probs_pred = mask_pred_per_image.sigmoid()
+                        else:
+                            # Select masks corresponding to the predicted classes
+                            ins_ids, cls_ids = topk_indices // self.num_classes, topk_indices % self.num_classes
+                            # mask_probs_pred.shape: (B, 1, Hmask, Wmask)
+                            mask_probs_pred = mask_pred_per_image[ins_ids, cls_ids][:, None].sigmoid()
+                    elif self.type_mask == "MASK_ENCODING":
+                        # Select masks corresponding to the predicted classes
+                        ins_ids, cls_ids = topk_indices // self.num_classes, topk_indices % self.num_classes
+                        mask_probs_pred = mask_pred_per_image[ins_ids][:, None].sigmoid()
+                    else:
+                        raise NotImplementedError
+                    result.pred_masks = mask_probs_pred
+
                 results.append(result)
 
         else:
