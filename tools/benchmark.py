@@ -89,14 +89,8 @@ def benchmark_train(args):
     model = build_model(cfg)
     logger.info("Model:\n{}".format(model))
     if comm.get_world_size() > 1:
-        model = DistributedDataParallel(
-<<<<<<< HEAD
-            model, device_ids=[comm.get_local_rank()], broadcast_buffers=False,
-            find_unused_parameters=True
-=======
-            model, device_ids=[comm.get_local_rank()], broadcast_buffers=False, find_unused_parameters=True
->>>>>>> 7b936afd5b423c3188687d8b529a984bed528a87
-        )
+        model = DistributedDataParallel(model, device_ids=[comm.get_local_rank()], broadcast_buffers=False,
+                                        find_unused_parameters=True)
     optimizer = build_optimizer(cfg, model)
     checkpointer = DetectionCheckpointer(model, optimizer=optimizer)
     checkpointer.load(cfg.MODEL.WEIGHTS)
